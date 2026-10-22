@@ -1,0 +1,26 @@
+{
+  "name": "omnitouch",
+  "version": "1.0.0",
+  "description": "Cross-browser human-grade AI web harness and neural extension",
+  "type": "module",
+  "main": "src/bridge/server.ts",
+  "bin": {
+    "omnitouch": "./bin/omnitouch.js"
+  },
+  "scripts": {
+    "build": "bun run build.mjs",
+    "build:chrome": "bun run build.mjs --target=chrome",
+    "build:firefox": "bun run build.mjs --target=firefox",
+    "start:bridge": "bun run src/bridge/server.ts",
+    "mcp": "bun run src/bridge/mcp.ts",
+    "cli": "bun run src/bridge/cli.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13"
+  }
+}

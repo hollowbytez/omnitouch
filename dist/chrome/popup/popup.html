@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>OmniTouch Neural Bridge</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body class="dark">
+  <div class="container">
+    <header class="header">
+      <div class="brand">
+        <div class="logo-mark"></div>
+        <div>
+          <h1 class="title">OmniTouch</h1>
+          <span class="version">v1.0.0 Neural Core</span>
+        </div>
+      </div>
+      <div class="bridge-status" id="bridge-status">
+        <span class="status-indicator" id="status-indicator"></span>
+        <span class="status-label" id="status-label">Bridge Offline</span>
+      </div>
+    </header>
+
+    <section class="section">
+      <label class="section-title">Autonomy Mode</label>
+      <div class="mode-grid">
+        <button class="mode-card" data-mode="permissions" id="btn-mode-permissions">
+          <div class="mode-header">
+            <span class="mode-badge badge-permissions">Strict</span>
+          </div>
+          <p class="mode-desc">Zero-trust. Prompt approval on every mutating action.</p>
+        </button>
+
+        <button class="mode-card active" data-mode="balanced" id="btn-mode-balanced">
+          <div class="mode-header">
+            <span class="mode-badge badge-balanced">Balanced</span>
+          </div>
+          <p class="mode-desc">Fluid autonomy. Intercepts passwords, checkouts and deletions.</p>
+        </button>
+
+        <button class="mode-card" data-mode="full" id="btn-mode-full">
+          <div class="mode-header">
+            <span class="mode-badge badge-full">God Mode</span>
+          </div>
+          <p class="mode-desc">Full uncapped velocity. 100% hands-off autonomous execution.</p>
+        </button>
+      </div>
+    </section>
+
+    <section class="section">
+      <label class="section-title">Diagnostics & Visuals</label>
+      <div class="toggle-row">
+        <span class="toggle-label">Ghost Hand Motion Trail</span>
+        <label class="switch">
+          <input type="checkbox" id="toggle-ghost-cursor" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="action-grid">
+        <button class="btn btn-secondary" id="btn-scan-elements">Scan Marks (SoM)</button>
+        <button class="btn btn-secondary" id="btn-clear-marks">Clear Marks</button>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="hotkey-pill">
+        <span>Panic Killswitch</span>
+        <kbd>Ctrl+Shift+X</kbd>
+      </div>
+    </footer>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
