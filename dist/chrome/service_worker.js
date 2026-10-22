@@ -27,7 +27,7 @@ function connectBridge() {
     ws.onmessage = async (event) => {
       try {
         const cmd = JSON.parse(event.data);
-        const result = await routeCommandToActiveTab(cmd);
+        const result = await routeCommand(cmd);
         ws?.send(JSON.stringify(result));
       } catch (err) {
         ws?.send(JSON.stringify({
@@ -54,15 +54,58 @@ function scheduleReconnect() {
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connectBridge();
-  }, 3000);
+  }, 2000);
 }
-async function getActiveTabId() {
+async function getActiveTab() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tabs[0]?.id ?? null;
+  return tabs[0] ?? null;
 }
-async function routeCommandToActiveTab(cmd) {
-  const tabId = await getActiveTabId();
-  if (!tabId) {
+async function routeCommand(cmd) {
+  const tab = await getActiveTab();
+  if (cmd.action === "navigate") {
+    const p = cmd.payload;
+    if (tab?.id) {
+      await chrome.tabs.update(tab.id, { url: p.url });
+    } else {
+      await chrome.tabs.create({ url: p.url });
+    }
+    return {
+      id: cmd.id,
+      success: true,
+      data: { url: p.url, tabId: tab?.id },
+      timestamp: Date.now()
+    };
+  }
+  if (cmd.action === "get_status") {
+    if (!tab?.id) {
+      return {
+        id: cmd.id,
+        success: true,
+        data: { mode: "balanced", url: "about:blank", title: "No Tab" },
+        timestamp: Date.now()
+      };
+    }
+    try {
+      const res = await Promise.race([
+        chrome.tabs.sendMessage(tab.id, cmd),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Tab response timeout")), 1200))
+      ]);
+      return res;
+    } catch {
+      return {
+        id: cmd.id,
+        success: true,
+        data: {
+          mode: "balanced",
+          url: tab.url || "about:blank",
+          title: tab.title || "Active Tab",
+          tabId: tab.id
+        },
+        timestamp: Date.now()
+      };
+    }
+  }
+  if (!tab?.id) {
     return {
       id: cmd.id,
       success: false,
@@ -71,7 +114,10 @@ async function routeCommandToActiveTab(cmd) {
     };
   }
   try {
-    const res = await chrome.tabs.sendMessage(tabId, cmd);
+    const res = await Promise.race([
+      chrome.tabs.sendMessage(tab.id, cmd),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Content script timeout")), 30000))
+    ]);
     return res;
   } catch (err) {
     return {
