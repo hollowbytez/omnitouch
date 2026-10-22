@@ -68,6 +68,22 @@ async function getActiveTab(): Promise<chrome.tabs.Tab | null> {
   return tabs[0] ?? null;
 }
 
+async function ensureContentScript(tabId: number): Promise<void> {
+  try {
+    await chrome.tabs.sendMessage(tabId, { id: "ping", action: "get_status", payload: {}, timestamp: Date.now() });
+  } catch {
+    try {
+      if (chrome.scripting?.executeScript) {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content.js"]
+        });
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    } catch {}
+  }
+}
+
 async function routeCommand(cmd: CommandMessage): Promise<CommandResult> {
   const tab = await getActiveTab();
 
@@ -86,16 +102,18 @@ async function routeCommand(cmd: CommandMessage): Promise<CommandResult> {
     };
   }
 
-  if (cmd.action === "get_status") {
-    if (!tab?.id) {
-      return {
-        id: cmd.id,
-        success: true,
-        data: { mode: "balanced", url: "about:blank", title: "No Tab" },
-        timestamp: Date.now()
-      };
-    }
+  if (!tab?.id) {
+    return {
+      id: cmd.id,
+      success: false,
+      error: "No active browser tab found.",
+      timestamp: Date.now()
+    };
+  }
 
+  await ensureContentScript(tab.id);
+
+  if (cmd.action === "get_status") {
     try {
       const res = await Promise.race([
         chrome.tabs.sendMessage(tab.id, cmd),
@@ -117,19 +135,10 @@ async function routeCommand(cmd: CommandMessage): Promise<CommandResult> {
     }
   }
 
-  if (!tab?.id) {
-    return {
-      id: cmd.id,
-      success: false,
-      error: "No active browser tab found.",
-      timestamp: Date.now()
-    };
-  }
-
   try {
     const res = await Promise.race([
       chrome.tabs.sendMessage(tab.id, cmd),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Content script timeout")), 30000))
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Content script timeout")), 25000))
     ]);
     return res as CommandResult;
   } catch (err) {

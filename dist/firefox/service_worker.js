@@ -60,6 +60,21 @@ async function getActiveTab() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
   return tabs[0] ?? null;
 }
+async function ensureContentScript(tabId) {
+  try {
+    await chrome.tabs.sendMessage(tabId, { id: "ping", action: "get_status", payload: {}, timestamp: Date.now() });
+  } catch {
+    try {
+      if (chrome.scripting?.executeScript) {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content.js"]
+        });
+        await new Promise((r) => setTimeout(r, 200));
+      }
+    } catch {}
+  }
+}
 async function routeCommand(cmd) {
   const tab = await getActiveTab();
   if (cmd.action === "navigate") {
@@ -76,15 +91,16 @@ async function routeCommand(cmd) {
       timestamp: Date.now()
     };
   }
+  if (!tab?.id) {
+    return {
+      id: cmd.id,
+      success: false,
+      error: "No active browser tab found.",
+      timestamp: Date.now()
+    };
+  }
+  await ensureContentScript(tab.id);
   if (cmd.action === "get_status") {
-    if (!tab?.id) {
-      return {
-        id: cmd.id,
-        success: true,
-        data: { mode: "balanced", url: "about:blank", title: "No Tab" },
-        timestamp: Date.now()
-      };
-    }
     try {
       const res = await Promise.race([
         chrome.tabs.sendMessage(tab.id, cmd),
@@ -105,18 +121,10 @@ async function routeCommand(cmd) {
       };
     }
   }
-  if (!tab?.id) {
-    return {
-      id: cmd.id,
-      success: false,
-      error: "No active browser tab found.",
-      timestamp: Date.now()
-    };
-  }
   try {
     const res = await Promise.race([
       chrome.tabs.sendMessage(tab.id, cmd),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Content script timeout")), 30000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Content script timeout")), 25000))
     ]);
     return res;
   } catch (err) {
