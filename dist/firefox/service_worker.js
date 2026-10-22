@@ -7,6 +7,58 @@ var BRIDGE_HTTP_URL = `http://${DEFAULT_BRIDGE_HOST}:${DEFAULT_BRIDGE_PORT}`;
 // src/extension/background/service_worker.ts
 var ws = null;
 var reconnectTimer = null;
+function queryTabs(queryInfo) {
+  if (typeof browser !== "undefined" && browser.tabs?.query) {
+    return browser.tabs.query(queryInfo);
+  }
+  return new Promise((resolve) => {
+    chrome.tabs.query(queryInfo, (tabs) => resolve(tabs || []));
+  });
+}
+function sendTabMessage(tabId, msg) {
+  if (typeof browser !== "undefined" && browser.tabs?.sendMessage) {
+    return browser.tabs.sendMessage(tabId, msg);
+  }
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, msg, (res) => {
+      const err = chrome.runtime.lastError;
+      if (err)
+        reject(err);
+      else
+        resolve(res);
+    });
+  });
+}
+function updateTab(tabId, props) {
+  if (typeof browser !== "undefined" && browser.tabs?.update) {
+    return browser.tabs.update(tabId, props);
+  }
+  return new Promise((resolve) => {
+    chrome.tabs.update(tabId, props, (tab) => resolve(tab));
+  });
+}
+function createTab(props) {
+  if (typeof browser !== "undefined" && browser.tabs?.create) {
+    return browser.tabs.create(props);
+  }
+  return new Promise((resolve) => {
+    chrome.tabs.create(props, (tab) => resolve(tab));
+  });
+}
+function captureTab() {
+  if (typeof browser !== "undefined" && browser.tabs?.captureVisibleTab) {
+    return browser.tabs.captureVisibleTab(null, { format: "png" });
+  }
+  return new Promise((resolve, reject) => {
+    chrome.tabs.captureVisibleTab({ format: "png" }, (dataUrl) => {
+      const err = chrome.runtime.lastError;
+      if (err)
+        reject(err);
+      else
+        resolve(dataUrl);
+    });
+  });
+}
 function connectBridge() {
   if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
     return;
@@ -57,32 +109,17 @@ function scheduleReconnect() {
   }, 2000);
 }
 async function getActiveTab() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  const tabs = await queryTabs({ active: true, currentWindow: true });
   return tabs[0] ?? null;
-}
-async function ensureContentScript(tabId) {
-  try {
-    await chrome.tabs.sendMessage(tabId, { id: "ping", action: "get_status", payload: {}, timestamp: Date.now() });
-  } catch {
-    try {
-      if (chrome.scripting?.executeScript) {
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          files: ["content.js"]
-        });
-        await new Promise((r) => setTimeout(r, 200));
-      }
-    } catch {}
-  }
 }
 async function routeCommand(cmd) {
   const tab = await getActiveTab();
   if (cmd.action === "navigate") {
     const p = cmd.payload;
     if (tab?.id) {
-      await chrome.tabs.update(tab.id, { url: p.url });
+      await updateTab(tab.id, { url: p.url });
     } else {
-      await chrome.tabs.create({ url: p.url });
+      await createTab({ url: p.url });
     }
     return {
       id: cmd.id,
@@ -99,11 +136,10 @@ async function routeCommand(cmd) {
       timestamp: Date.now()
     };
   }
-  await ensureContentScript(tab.id);
   if (cmd.action === "get_status") {
     try {
       const res = await Promise.race([
-        chrome.tabs.sendMessage(tab.id, cmd),
+        sendTabMessage(tab.id, cmd),
         new Promise((_, reject) => setTimeout(() => reject(new Error("Tab response timeout")), 1200))
       ]);
       return res;
@@ -123,7 +159,7 @@ async function routeCommand(cmd) {
   }
   try {
     const res = await Promise.race([
-      chrome.tabs.sendMessage(tab.id, cmd),
+      sendTabMessage(tab.id, cmd),
       new Promise((_, reject) => setTimeout(() => reject(new Error("Content script timeout")), 25000))
     ]);
     return res;
@@ -136,15 +172,10 @@ async function routeCommand(cmd) {
     };
   }
 }
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+var runtimeApi = typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
+runtimeApi.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "capture_tab_screenshot") {
-    chrome.tabs.captureVisibleTab({ format: "png" }, (dataUrl) => {
-      if (chrome.runtime.lastError) {
-        sendResponse({ error: chrome.runtime.lastError.message });
-      } else {
-        sendResponse({ dataUrl });
-      }
-    });
+    captureTab().then((dataUrl) => sendResponse({ dataUrl })).catch((err) => sendResponse({ error: String(err) }));
     return true;
   }
   if (msg.type === "mode_changed") {
@@ -154,10 +185,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   return true;
 });
-chrome.runtime.onInstalled.addListener(() => {
-  connectBridge();
-});
-chrome.runtime.onStartup.addListener(() => {
-  connectBridge();
-});
+if (runtimeApi.onInstalled) {
+  runtimeApi.onInstalled.addListener(() => connectBridge());
+}
+if (runtimeApi.onStartup) {
+  runtimeApi.onStartup.addListener(() => connectBridge());
+}
 connectBridge();

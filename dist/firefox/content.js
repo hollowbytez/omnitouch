@@ -1002,27 +1002,36 @@ function gaussianRandom(mean, stdev) {
 }
 
 // src/extension/content/index.ts
+var runtime = typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
 var lastCursorX = window.innerWidth / 2;
 var lastCursorY = window.innerHeight / 2;
 var isExecuting = false;
 var isAborted = false;
 function init() {
   initHUD((newMode) => {
-    chrome.runtime.sendMessage({ type: "mode_changed", mode: newMode });
+    try {
+      runtime.sendMessage({ type: "mode_changed", mode: newMode });
+    } catch {}
   });
   initGhostCursor();
   window.addEventListener("omnitouch-panic", () => {
     isAborted = true;
     isExecuting = false;
   });
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    handleCommand(message).then((res) => sendResponse(res)).catch((err) => {
-      sendResponse({
-        id: message.id,
-        success: false,
-        error: String(err),
-        timestamp: Date.now()
-      });
+  runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    handleCommand(message).then((res) => {
+      try {
+        sendResponse(res);
+      } catch {}
+    }).catch((err) => {
+      try {
+        sendResponse({
+          id: message.id,
+          success: false,
+          error: String(err),
+          timestamp: Date.now()
+        });
+      } catch {}
     });
     return true;
   });
@@ -1071,9 +1080,9 @@ async function handleCommand(cmd) {
     }
     await new Promise((r) => setTimeout(r, 60));
     const captureRes = await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: "capture_tab_screenshot" }, (res) => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
+      runtime.sendMessage({ type: "capture_tab_screenshot" }, (res) => {
+        if (runtime.lastError) {
+          reject(runtime.lastError);
         } else {
           resolve(res);
         }

@@ -1,9 +1,12 @@
 import type { CommandMessage, CommandResult, PermissionMode } from "../../shared/types";
 import { initHUD, updateHUDStatus, updateModeDisplay, requestUserApproval } from "./hud";
-import { initGhostCursor, updateGhostCursor, triggerClickPulse, setGhostCursorEnabled } from "./ghost_cursor";
+import { initGhostCursor, updateGhostCursor, triggerClickPulse } from "./ghost_cursor";
 import { scanInteractiveElements, getElementByMarkId, renderSoMOverlay, clearSoMOverlay, buildAXTree } from "./vision";
 import { generateBezierPath, executeHumanMouseMotion, humanClick, humanType } from "./kinematics";
 import { getActiveMode, setActiveMode, evaluateActionSecurity } from "./modes";
+
+declare const browser: any;
+const runtime = typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
 
 let lastCursorX = window.innerWidth / 2;
 let lastCursorY = window.innerHeight / 2;
@@ -12,7 +15,9 @@ let isAborted = false;
 
 function init(): void {
   initHUD((newMode) => {
-    chrome.runtime.sendMessage({ type: "mode_changed", mode: newMode });
+    try {
+      runtime.sendMessage({ type: "mode_changed", mode: newMode });
+    } catch {}
   });
   initGhostCursor();
 
@@ -21,16 +26,20 @@ function init(): void {
     isExecuting = false;
   });
 
-  chrome.runtime.onMessage.addListener((message: CommandMessage, _sender, sendResponse) => {
+  runtime.onMessage.addListener((message: CommandMessage, _sender: any, sendResponse: (res: any) => void) => {
     handleCommand(message)
-      .then((res) => sendResponse(res))
+      .then((res) => {
+        try { sendResponse(res); } catch {}
+      })
       .catch((err) => {
-        sendResponse({
-          id: message.id,
-          success: false,
-          error: String(err),
-          timestamp: Date.now()
-        });
+        try {
+          sendResponse({
+            id: message.id,
+            success: false,
+            error: String(err),
+            timestamp: Date.now()
+          });
+        } catch {}
       });
     return true;
   });
@@ -87,9 +96,9 @@ async function handleCommand(cmd: CommandMessage): Promise<CommandResult> {
     await new Promise((r) => setTimeout(r, 60));
 
     const captureRes = await new Promise<{ dataUrl: string }>((resolve, reject) => {
-      chrome.runtime.sendMessage({ type: "capture_tab_screenshot" }, (res) => {
-        if (chrome.runtime.lastError) {
-          reject(chrome.runtime.lastError);
+      runtime.sendMessage({ type: "capture_tab_screenshot" }, (res: any) => {
+        if (runtime.lastError) {
+          reject(runtime.lastError);
         } else {
           resolve(res);
         }
